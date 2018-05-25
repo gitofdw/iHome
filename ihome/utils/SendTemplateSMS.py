@@ -27,11 +27,22 @@ softVersion = '2013-12-26'
 
 
 class CCPR(object):
-    def __init__(self):
-        # 初始化REST SDK
-        self.rest = REST(serverIP, serverPort, softVersion)
-        self.rest.setAccount(accountSid, accountToken)
-        self.rest.setAppId(appId)
+    def __new__(cls, *args, **kwargs):
+        # 判断cls是否拥有属性_instance, 此属性用于保存这个类的唯一对象(单例对象)
+        if not hasattr(cls, "_instance"):
+            obj = super(CCPR, cls).__new__(cls, *args, **kwargs)
+            obj.rest = REST(serverIP, serverPort, softVersion)
+            obj.rest.setAccount(accountSid, accountToken)
+            obj.rest.setAppId(appId)
+            cls._instance = obj
+
+        return cls._instance
+
+    # def __init__(self):
+    #     # 初始化REST SDK
+    #     self.rest = REST(serverIP, serverPort, softVersion)
+    #     self.rest.setAccount(accountSid, accountToken)
+    #     self.rest.setAppId(appId)
 
     # 发送模板短信
     # @param to 手机号码

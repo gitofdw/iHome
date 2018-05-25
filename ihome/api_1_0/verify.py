@@ -46,15 +46,16 @@ def send_sms_code():
 
     # 4.如果一致使用云通讯发送短信
     # 4.1随机生成一个6位验证码
-    sms_code = "%06s" % random.randint(0, 999999)
+    sms_code = "%06d" % random.randint(0, 999999)
+    current_app.logger.info(sms_code)
     # 4.2使用云通讯发送验证码
-    try:
-        res = CCPR().send_template_sms(mobile, [sms_code, constants.SMS_CODE_REDIS_EXPIRES], 1)
-    except Exception as e:
-        current_app.logger.error(e)
-        return jsonify(errno=RET.THIRDERR, errmsg="发送短信失败")
-    if res != 1:
-        return jsonify(errno=RET.THIRDERR, errmsg="发送短信验证码失败")
+    # try:
+    #     res = CCPR().send_template_sms(mobile, [sms_code, constants.SMS_CODE_REDIS_EXPIRES], 1)
+    # except Exception as e:
+    #     current_app.logger.error(e)
+    #     return jsonify(errno=RET.THIRDERR, errmsg="发送短信失败")
+    # if res != 1:
+    #     return jsonify(errno=RET.THIRDERR, errmsg="发送短信验证码失败")
     # 4.3在redis中保存短信验证码
     try:
         redis_store.set("smscode:%s" % mobile, sms_code, constants.SMS_CODE_REDIS_EXPIRES)
@@ -76,6 +77,7 @@ def get_image_code():
     # 2.生成图片验证码
     # 通过captcha产生验证码
     name, text, content = captcha.generate_captcha()
+    current_app.logger.info(text)
     # 3.在redis数据库中保存图片验证码
     # redis_store.set("key", "value", "expires")
     try:
