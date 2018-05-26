@@ -54,6 +54,42 @@ $(document).ready(function () {
         })
     });
     // TODO: 管理用户名修改的逻辑
+    $("#form-name").submit(function (e) {
+        e.preventDefault();
+        // 获取参数
+        var username = $("#user-name").val();
+
+        if(!username){
+            alert("请输入用户名");
+            return;
+        }
+        var params = {
+            "username": username
+        };
+
+        // 请求修改用户名
+         $.ajax({
+            "url": "/api/v1.0/user/name",
+            "type": "put",
+            "contentType": "application/json",
+            "data": JSON.stringify(params),
+            "dataType": "json",
+            "headers": {
+                "X-CSRFToken": getCookie("csrf_token"),
+            },
+            "success": function (resp) {
+                 if(resp.errno == "0"){
+                     // 修改成功
+                     showSuccessMsg();
+                 }else {
+                     // 修改失败
+                     alert(resp.errmsg);
+                 }
+
+            }
+        });
+
+    });
 
 });
 
