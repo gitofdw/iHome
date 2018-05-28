@@ -10,6 +10,136 @@ from ihome.utils.response_code import RET
 from . import api
 
 
+@api.route("/houses")
+def get_house_list():
+    """
+    搜索房屋的信息:
+    """
+    aid = request.args.get("aid")  # 城区id
+    # new: 最新上线 booking: 入住最多 price-inc: 价格低->高 price-des:价格高->低
+    sort_key = request.args.get("sk", "new")  # 排序方式，默认按照最新上线进行排序
+    page = request.args.get("p", 1)  # 页码
+    sd = request.args.get("sd")  # 搜索起始时间
+    ed = request.args.get("ed")  # 搜索结束时间
+    start_date = None
+    end_date = None
+
+    print request.args
+
+    try:
+        if aid:
+            aid = int(aid)
+
+        page = int(page)
+
+        # 处理搜索时间
+        if sd:
+            start_date = datetime.strptime(sd, "%Y-%m-%d")
+
+        if ed:
+            end_date = datetime.strptime(ed, "%Y-%m-%d")
+
+        if start_date and end_date:
+            assert start_date < end_date, Exception("搜索起始时间大于结束时间")
+    except Exception as e:
+        current_app.logger.error(e)
+        return jsonify(errno=RET.PARAMERR, errmsg="参数错误")
+
+    # 尝试从缓存中获取搜索结果
+    try:
+        key = "%s:%s:%s:%s" % (aid, sd, ed, sort_key)
+        res_str = redis_store.hget(key, page)
+        if res_str:
+            return jsonify(errno=RET.OK, errmsg="OK", data=json.loads(res_str))
+    except Exception as e:
+        current_app.logger.error(e)
+
+    # 获取所有房屋的信息
+    try:
+        houses_query = House.query
+
+        # 根据城区id对房屋信息进行过滤
+        if aid:
+            houses_query = houses_query.filter(House.area_id == aid)  # BaseQuery
+
+        try:
+            # 排除和搜索时间冲突房屋信息
+            conflict_orders_li = []
+            if start_date and end_date:
+                conflict_orders_li = Order.query.filter(end_date > Order.begin_date, start_date < Order.end_date).all()
+            elif start_date:
+                conflict_orders_li = Order.query.filter(start_date < Order.end_date).all()
+            elif end_date:
+                conflict_orders_li = Order.query.filter(end_date > Order.begin_date).all()
+
+            if conflict_orders_li:
+                # 获取和搜索时间冲突房屋id列表
+                conflict_houses_id = [order.house_id for order in conflict_orders_li]
+
+                # 排除冲突房屋信息
+                houses_query = houses_query.filter(House.id.notin_(conflict_houses_id))
+        except Exception as e:
+            current_app.logger.error(e)
+            return jsonify(errno=RET.DBERR, errmsg="排除冲突房屋信息失败")
+
+        # 对查询结果进行排序
+        if sort_key == "booking":
+            # 按照房屋订单数量排序
+            houses_query = houses_query.order_by(House.order_count.desc())
+        elif sort_key == "price-inc":
+            # 价格低->高
+            houses_query = houses_query.order_by(House.price)
+        elif sort_key == "price-des":
+            # 价格高->低
+            houses_query = houses_query.order_by(House.price.desc())
+        else:
+            # 按照最新上线进行排序
+            houses_query = houses_query.order_by(House.create_time.desc())
+
+        # 进行分页操作
+        paginate = houses_query.paginate(page, constants.HOUSE_LIST_PAGE_CAPACITY, False)
+
+        # 获取搜索结果
+        houses = paginate.items
+        total_page = paginate.pages  # 分页之后总页数
+        current_page = paginate.page  # 当前页页码
+
+    except Exception as e:
+        current_app.logger.error(e)
+        return jsonify(errno=RET.DBERR, errmsg="获取房屋信息失败")
+
+    # 组织数据，返回应答
+    house_dict_li = []
+    for house in houses:
+        house_dict_li.append(house.to_basic_dict())
+
+    resp = {
+        "houses": house_dict_li,
+        "total_page": total_page,
+        "current_page": current_page
+    }
+
+    # 在redis中缓存搜索结果
+    try:
+        key = "%s:%s:%s:%s" % (aid, sd, ed, sort_key)
+        # 创建一个redis管道对象
+        pipeline = redis_store.pipeline()
+
+        # 开启redis事务
+        pipeline.multi()
+
+        # 向管道中添加命令
+        pipeline.hset(key, page, json.dumps(resp))
+        pipeline.expire(key, constants.HOUSE_LIST_REDIS_EXPIRES)
+
+        # 执行事务
+        pipeline.execute()
+    except Exception as e:
+        current_app.logger.error(e)
+
+    return jsonify(errno=RET.OK, errmsg="OK", data=resp)
+
+
 @api.route("/house/index")
 def get_house_index():
     """
