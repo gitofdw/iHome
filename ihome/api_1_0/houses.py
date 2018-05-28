@@ -1,13 +1,35 @@
 # coding=utf8
 # 此文件用于与房屋相关的api接口
 from flask import current_app, jsonify, request, session, g
-
-from ihome import db, constants
+import json
+from ihome import db, constants, redis_store
 from ihome.models import Area, House, Facility, HouseImage
 from ihome.utils.commons import login_required
 from ihome.utils.image_storage import storage_image
 from ihome.utils.response_code import RET
 from . import api
+
+
+@api.route("/house/index")
+def get_house_index():
+    """
+    获取首页展示房屋信息:
+    # 1. 获取房屋的信息, 按照房屋发布时间进行排序, 默认展示前五个
+    # 2. 组织数据, 返回应答
+    """
+    # 1. 获取房屋的信息, 按照房屋发布时间进行排序, 默认展示前五个
+    try:
+        houses = House.query.order_by(House.create_time.desc()).limit(constants.HOME_PAGE_MAX_HOUSES).all()
+    except Exception as e:
+        current_app.logger.error(e)
+        return jsonify(errno=RET.DBERR, errmsg="获取房屋信息失败")
+
+    # 2. 组织数据, 返回应答
+    house_dict_li = []
+    for house in houses:
+        house_dict_li.append(house.to_basic_dict())
+
+    return jsonify(errno=RET.OK, errmsg="OK", data=house_dict_li)
 
 
 @api.route("/house/<int:house_id>")
@@ -175,6 +197,17 @@ def get_areas_info():
     # 1. 获取所有城区信息
     # 2. 组织信息, 返回应答
     """
+    try:
+        # 先尝试在redis缓存中获取信息
+        areas_str = redis_store.get("areas")
+        # 如果获取的到, 直接返回
+        if areas_str:
+            return jsonify(errno=RET.OK, errmsg="OK", data=json.loads(areas_str))
+
+    except Exception as e:
+        current_app.logger.error(e)
+
+    # 如果获取不到, 查询数据库
     # 1. 获取所有城区信息
     try:
         areas = Area.query.all()
@@ -186,5 +219,10 @@ def get_areas_info():
     areas_dict_li = []
     for area in areas:
         areas_dict_li.append(area.to_dict())
+
+    try:
+        redis_store.set("areas", json.dumps(areas_dict_li))
+    except Exception as e:
+        current_app.logger.error(e)
 
     return jsonify(errno=RET.OK, data=areas_dict_li)
