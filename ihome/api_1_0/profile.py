@@ -1,16 +1,107 @@
 # coding=utf8
 # 此文件用于获取用户信息相关的api
 from flask import session, jsonify
-from flask.globals import current_app, request
+from flask.globals import current_app, request, g
 
 from ihome import db, constants
+from ihome.utils.commons import login_required
 from ihome.utils.image_storage import storage_image
 from ihome.models import User
 from ihome.utils.response_code import RET
 from . import api
 
 
+@api.route("/user/auth")
+@login_required
+def get_user_auth():
+    """
+    获取用户实名信息:
+    # 1. 获取登录用户id
+    # 2. 根据用户id查询用户信息
+    # 3. 组织数据, 返回应答
+    """
+    # 1. 获取登录用户id
+    user_id = g.user_id
+
+    # 2. 根据用户id查询用户信息
+    # 根据id查询用户的信息(如果查不到,说明用户不存在)
+    try:
+        user = User.query.get(user_id)
+    except Exception as e:
+        current_app.logger.error(e)
+        return jsonify(errno=RET.DBERR, errmsg="查询用户信息失败")
+
+    if not user:
+        return jsonify(errno=RET.USERERR, errmsg="用户不存在")
+    # 3. 组织数据, 返回应答
+    return jsonify(errno=RET.OK, errmsg="OK", data=user.auth_to_dict())
+
+
+@api.route("/user/auth", methods=["POST"])
+@login_required
+def set_user_auth():
+    """
+    用户进行实名认证:
+    # 1. 接收参数(真实姓名, 身份证号)并进行参数校验
+    # 2. todo: 调用第三方接口验证真实姓名和身份证是否一致
+    # 3. 设置用户实名验证信息
+    # 4. 返回应答, 实名认证成功
+    """
+    # 1. 接收参数(真实姓名, 身份证号)并进行参数校验
+    req_dict = request.json
+    real_name = req_dict.get("real_name")
+    id_card = req_dict.get("id_card")
+
+    if not all([real_name, id_card]):
+        return jsonify(errno=RET.PARAMERR, errmsg="参数不完整")
+    # 2. todo: 调用第三方接口验证真实姓名和身份证是否一致
+
+    # 3. 设置用户实名验证信息
+    user_id = g.user_id
+
+    # 根据id查询用户的信息(如果查不到,说明用户不存在)
+    try:
+        user = User.query.get(user_id)
+    except Exception as e:
+        current_app.logger.error(e)
+        return jsonify(errno=RET.DBERR, errmsg="查询用户信息失败")
+
+    if not user:
+        return jsonify(errno=RET.USERERR, errmsg="用户不存在")
+
+    if user.real_name and user.id_card:
+        # 已实名认证
+        return jsonify(errno=RET.DATAEXIST, errmsg="已进行实名认证")
+
+    user.real_name = real_name
+    user.id_card = id_card
+
+    try:
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(e)
+        return jsonify(errno=RET.DBERR, errmsg="保存用户实名认证信息失败")
+
+    # 4. 返回应答, 实名认证成功
+    return jsonify(errno=RET.OK, errmsg="保存用户实名认证信息成功")
+
+
+@api.route("/sessions", methods=['DELETE'])
+def logout():
+    """
+    用户退出登录
+    # 1. 清除用户登录状态session信息
+    # 2. 返回应答
+    """
+    # 1. 清除用户登录状态session信息
+    session.clear()
+    # 2. 返回应答
+    return jsonify(errno=RET.OK, errmsg="退出登录成功")
+
+
 @api.route("/user/name", methods=["PUT"])
+@login_required
 def set_user_name():
     """
     设置用户的用户名:
@@ -37,7 +128,7 @@ def set_user_name():
 
     if user:
         return jsonify(errno=RET.DATAEXIST, errmsg="用户名已存在")
-    user_id = session.get("user_id")
+    user_id = g.user_id
 
     # 根据id查询用户的信息(如果查不到,说明用户不存在)
     try:
@@ -63,6 +154,7 @@ def set_user_name():
 
 
 @api.route("/user/avatar", methods=["POST"])
+@login_required
 def set_user_avatar():
     """
     设置用户头像信息:
@@ -85,7 +177,7 @@ def set_user_avatar():
         return jsonify(errno=RET.THIRDERR, errmsg="上传头像失败")
 
     # 3. 设置用户头像记录
-    user_id = session.get("user_id")
+    user_id = g.user_id
 
     # 根据id查询用户的信息(如果查不到,说明用户不存在)
     try:
@@ -111,6 +203,7 @@ def set_user_avatar():
 
 
 @api.route('/user')
+@login_required
 def get_user_info():
     """
     获取用户个人信息
@@ -121,7 +214,7 @@ def get_user_info():
     """
     # todo:0.判断用户是否登录
     # 1.获取登录用户的id
-    user_id = session.get("user_id")
+    user_id = g.user_id
 
     # 2.根据id查询用户的信息(如果查不到,说明用户不存在)
     try:

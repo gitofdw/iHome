@@ -10,6 +10,17 @@ from ihome.utils.response_code import RET
 from . import api
 
 
+@api.route("/sessions")
+def check_user_login():
+    """
+    获取用户登录信息
+    """
+    user_id = session.get("user_id", "")
+    username = session.get("user_name", "")
+
+    return jsonify(errno=RET.OK, errmsg="OK", data={"user_id": user_id, "username": username})
+
+
 @api.route("/sessions", methods=["POST"])
 def login():
     """
@@ -45,6 +56,10 @@ def login():
     session["user_id"] = user.id
     session["mobile"] = user.mobile
     session["user_name"] = user.name
+    if hasattr(current_app, "next"):
+        url = re.match("http://127.0.0.1:5000/(.*)", current_app.next).group(1)
+        data = {"next": url}
+        return jsonify(errno="4000", data=data)
     # 5.返回应答,登录成功
     return jsonify(errno=RET.OK, errmsg="登录成功")
 

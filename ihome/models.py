@@ -44,7 +44,16 @@ class User(BaseModel, db.Model):
         resp = {
             "user_id": self.id,
             "username": self.name,
+            "mobile": self.mobile,
             "avatar_url": constants.QINIU_DOMIN_PREFIX + self.avatar_url if self.avatar_url else ''
+        }
+        return resp
+
+    def auth_to_dict(self):
+        resp = {
+            "user_id": self.id,
+            "real_name": self.real_name,
+            "id_card": self.id_card
         }
         return resp
 

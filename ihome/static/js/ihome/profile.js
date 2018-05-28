@@ -19,6 +19,10 @@ $(document).ready(function () {
             $('#user-avatar').attr("src", resp.data.avatar_url);
             $('#user-name').val(resp.data.username);
         }
+        else if(resp.errno== "4101"){
+            // 用户未登录,跳转到登录页面
+            location.href = "login.html";
+        }
         else {
             alert(resp.errmsg)
         }
@@ -81,7 +85,12 @@ $(document).ready(function () {
                  if(resp.errno == "0"){
                      // 修改成功
                      showSuccessMsg();
-                 }else {
+                 }
+                 else if(resp.errno== "4101"){
+                     // 用户未登录,跳转到登录页面
+                     location.href = "login.html";
+                 }
+                 else {
                      // 修改失败
                      alert(resp.errmsg);
                  }

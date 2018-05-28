@@ -44,6 +44,10 @@ $(document).ready(function() {
                     // 登录成功
                     location.href = "index.html";
                 }
+                else if (resp.errno == "4000"){
+                    // 跳转到之前的页面
+                    location.href = resp.data["next"]
+                }
                 else {
                     $("#password-err span").html(resp.errmsg);
                     $("#password-err").show();
